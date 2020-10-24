@@ -1,8 +1,5 @@
+#![allow(dead_code)]
 use std::cmp;
-/*
- * Currently, most of these structs are generic over T, the point type.
- *
- */
 #[derive(Default, Debug, Clone)]
 pub struct Node {
     //T needs to be an iterable. Each element of T needs to impl PartialOrd and I need to be able
@@ -14,7 +11,7 @@ pub struct Node {
     pub depth: usize,
 }
 
-struct KDTree {
+pub struct KDTree {
     //Questions:
     //1. Should this be generic over f64?
     //2. Should this be generic over the point representation? If so, what trait must it satisfy
@@ -62,21 +59,16 @@ impl IntoIterator for Node {
 
 impl Node {
     fn contains_helper(&self, target: &Vec<f64>) -> bool {
-        if target == &self.point {
-            return true;
-        }
-        if let Some(left) = &self.left {
-            if left.contains_helper(target) {
-                return true;
+        let axis = self.depth % self.point.len();
+        match &self.point[axis].partial_cmp(&target[axis]) {
+            Some(cmp::Ordering::Less) => self.right.as_ref().map_or(false, |x|x.contains_helper(target)),
+            Some(cmp::Ordering::Greater) => self.left.as_ref().map_or(false, |x| x.contains_helper(target)),
+            _ => {
+                (&self.point == target)
+                    || self.left.as_ref().map_or(false, |x| x.contains_helper(target))
+                    || self.right.as_ref().map_or(false, |x| x.contains_helper(target))
             }
         }
-        if let Some(right) = &self.right {
-            if right.contains_helper(target) {
-                return true;
-            }
-        }
-
-        false
     }
 }
 
@@ -98,6 +90,14 @@ impl KDTree {
     fn _new_helper(points: &mut Vec<Vec<f64>>, depth: usize) -> Node {
         // Currently this function assumes that each point in points has the same number fo
         // elements.
+        if points.len() == 0 {
+            return Node {
+                point: points[0].clone(),
+                left: None,
+                right: None,
+                depth: depth,
+            };
+        }
         if points.len() == 1 {
             return Node {
                 point: points[0].clone(),
@@ -116,7 +116,7 @@ impl KDTree {
                 .unwrap_or(cmp::Ordering::Equal)
         });
         let left = &mut points[0..median_index].to_vec();
-        let right = &mut points[median_index + 1..].to_vec();
+        let right = &mut points[median_index..].to_vec();
         Node {
             point: points[median_index].clone(),
             left: Some(Box::new(KDTree::_new_helper(left, depth + 1))),
