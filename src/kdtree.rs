@@ -1,17 +1,16 @@
 use std::cmp;
-use std::iter;
 /*
  * Currently, most of these structs are generic over T, the point type.
  *
  */
-#[derive(Default, Debug)]
-pub struct Node<T> {
+#[derive(Default, Debug, Clone)]
+pub struct Node {
     //T needs to be an iterable. Each element of T needs to impl PartialOrd and I need to be able
     //to add and square these (binary operations). A KDTree only makes sense for an affine space,
     //so I am fine making it only for Euclidean space.
-    pub point: T,
-    pub left: Option<Box<Node<T>>>,
-    pub right: Option<Box<Node<T>>>,
+    pub point: Vec<f64>,
+    pub left: Option<Box<Node>>,
+    pub right: Option<Box<Node>>,
     pub depth: usize,
 }
 
@@ -22,45 +21,67 @@ struct KDTree {
     //   (clearly it probably needs to be some (sized) sequence of float types.
     //3. Nightly Rust currently supports const generics, which would let me establish the size of
     //   each vector/the dimension of the kdtree at compile time, which would be nice.
-    root: Option<Node<Vec<f64>>>,
-    size: usize,
+    root: Option<Node>,
+    pub size: usize,
 }
 
-struct TreeIter<T> {
-    stack: Vec<T>,
+pub struct TreeIter {
+    stack: Vec<Node>,
 }
 
-impl<T> TreeIter<T> {
-    fn new(node: Node<T>) -> TreeIter<T> {
-        let mut tree_iter = TreeIter { stack: vec![] };
-        tree_iter._new_helper(node);
-
-        tree_iter
-    }
-
-    fn _new_helper(&mut self, node: Node<T>) {
-        if let Some(left_node) = node.left {
-            self._new_helper(*left_node);
-        }
-        self.stack.push(node.point);
-        if let Some(right_node) = node.right {
-            self._new_helper(*right_node);
-        }
+impl TreeIter {
+    fn new(node: Node) -> TreeIter {
+        TreeIter { stack: vec![node] }
     }
 }
-impl<T> Iterator for TreeIter<T> {
+impl Iterator for TreeIter {
     //Placeholder implementation
-    type Item = T;
-    fn next(&mut self) -> Option<T> {
-        self.stack.pop()
+    type Item = Vec<f64>;
+    fn next(&mut self) -> Option<Vec<f64>> {
+        if self.stack.is_empty() {
+            return None;
+        }
+        let result = self.stack.pop().unwrap();
+        if let Some(left_node) = result.left {
+            self.stack.push(*left_node);
+        }
+        if let Some(right_node) = result.right {
+            self.stack.push(*right_node);
+        }
+        Some(result.point)
     }
 }
-struct TreeIter2<T> {
-    stack: Vec<T>,
+
+impl IntoIterator for Node {
+    type Item = Vec<f64>;
+    type IntoIter = TreeIter;
+    fn into_iter(self) -> Self::IntoIter {
+        TreeIter::new(self)
+    }
+}
+
+impl Node {
+    fn contains_helper(&self, target: &Vec<f64>) -> bool {
+        if target == &self.point {
+            return true;
+        }
+        if let Some(left) = &self.left {
+            if left.contains_helper(target) {
+                return true;
+            }
+        }
+        if let Some(right) = &self.right {
+            if right.contains_helper(target) {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 impl KDTree {
-    fn new(points: &mut Vec<Vec<f64>>) -> KDTree {
+    pub fn new(points: &mut Vec<Vec<f64>>) -> KDTree {
         if points.len() == 0 {
             return KDTree {
                 root: None,
@@ -74,7 +95,7 @@ impl KDTree {
         }
     }
 
-    fn _new_helper(points: &mut Vec<Vec<f64>>, depth: usize) -> Node<Vec<f64>> {
+    fn _new_helper(points: &mut Vec<Vec<f64>>, depth: usize) -> Node {
         // Currently this function assumes that each point in points has the same number fo
         // elements.
         if points.len() == 1 {
@@ -103,17 +124,44 @@ impl KDTree {
             depth: depth,
         }
     }
-    fn iter(self) -> impl Iterator<Item = Vec<f64>> {
+    pub fn iter(self) -> impl Iterator<Item = Vec<f64>> {
         match self.root {
             Some(_root) => TreeIter::new(_root),
             None => TreeIter { stack: vec![] },
         }
     }
+
+    pub fn contains(&self, target: &Vec<f64>) -> bool {
+        match &self.root {
+            Some(r) => r.contains_helper(target),
+            None => false,
+        }
+    }
+}
+impl IntoIterator for KDTree {
+    type Item = Vec<f64>;
+    type IntoIter = TreeIter;
+    fn into_iter(self) -> Self::IntoIter {
+        if let Some(node) = self.root {
+            return TreeIter::new(node);
+        }
+        TreeIter { stack: vec![] }
+    }
 }
 #[cfg(test)]
 mod tests {
+    use super::*;
     #[test]
-    fn test_kdtree_creation() {
-        assert_eq!(1, 1);
+    fn test_kdtree_contains() {
+        let points = vec![vec![1., 2., 3.], vec![2., 3., 4.], vec![3., 4., 5.]];
+        let kdtree = KDTree::new(&mut points.clone());
+        assert_eq!(kdtree.size, 3);
+        for point in &points {
+            assert_eq!(kdtree.contains(&point), true);
+        }
+
+        for point in kdtree {
+            assert_eq!(points.contains(&point), true);
+        }
     }
 }
