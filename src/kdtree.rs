@@ -58,20 +58,54 @@ impl IntoIterator for Node {
 }
 
 impl Node {
+    fn from_point(target: Vec<f64>, depth: usize) -> Node {
+        Node {
+            point: target,
+            left: None,
+            right: None,
+            depth: depth,
+        }
+    }
     fn contains_helper(&self, target: &Vec<f64>) -> bool {
         let axis = self.depth % self.point.len();
         match &self.point[axis].partial_cmp(&target[axis]) {
-            Some(cmp::Ordering::Less) => self.right.as_ref().map_or(false, |x|x.contains_helper(target)),
-            Some(cmp::Ordering::Greater) => self.left.as_ref().map_or(false, |x| x.contains_helper(target)),
+            Some(cmp::Ordering::Less) => self
+                .right
+                .as_ref()
+                .map_or(false, |x| x.contains_helper(target)),
+            Some(cmp::Ordering::Greater) => self
+                .left
+                .as_ref()
+                .map_or(false, |x| x.contains_helper(target)),
             _ => {
                 (&self.point == target)
-                    || self.left.as_ref().map_or(false, |x| x.contains_helper(target))
-                    || self.right.as_ref().map_or(false, |x| x.contains_helper(target))
+                    || self
+                        .left
+                        .as_ref()
+                        .map_or(false, |x| x.contains_helper(target))
+                    || self
+                        .right
+                        .as_ref()
+                        .map_or(false, |x| x.contains_helper(target))
+            }
+        }
+    }
+
+    fn add_helper(&mut self, target: Vec<f64>) {
+        let axis = self.depth % self.point.len();
+        if self.point[axis].ge(&target[axis]) {
+            match &mut self.left {
+                Some(node) => node.add_helper(target),
+                None => self.left = Some(Box::new(Node::from_point(target, self.depth + 1))),
+            }
+        } else {
+            match &mut self.right {
+                Some(node) => node.add_helper(target),
+                None => self.right = Some(Box::new(Node::from_point(target, self.depth + 1))),
             }
         }
     }
 }
-
 impl KDTree {
     pub fn new(points: &mut Vec<Vec<f64>>) -> KDTree {
         if points.len() == 0 {
@@ -135,6 +169,15 @@ impl KDTree {
         match &self.root {
             Some(r) => r.contains_helper(target),
             None => false,
+        }
+    }
+    pub fn add(&mut self, target: Vec<f64>) {
+        self.size += 1;
+        match &mut self.root {
+            Some(node) => node.add_helper(target),
+            None => {
+                self.root = Some(Node::from_point(target, 0));
+            }
         }
     }
 }
