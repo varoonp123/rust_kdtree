@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 use std::cmp;
+
+type NDPoint = Vec<f64>;
 #[derive(Default, Debug, Clone)]
 pub struct Node {
     //T needs to be an iterable. Each element of T needs to impl PartialOrd and I need to be able
     //to add and square these (binary operations). A KDTree only makes sense for an affine space,
     //so I am fine making it only for Euclidean space.
-    pub point: Vec<f64>,
+    pub point: NDPoint,
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
     pub depth: usize,
@@ -33,8 +35,8 @@ impl TreeIter {
 }
 impl Iterator for TreeIter {
     //Placeholder implementation
-    type Item = Vec<f64>;
-    fn next(&mut self) -> Option<Vec<f64>> {
+    type Item = NDPoint;
+    fn next(&mut self) -> Option<NDPoint> {
         if self.stack.is_empty() {
             return None;
         }
@@ -50,7 +52,7 @@ impl Iterator for TreeIter {
 }
 
 impl IntoIterator for Node {
-    type Item = Vec<f64>;
+    type Item = NDPoint;
     type IntoIter = TreeIter;
     fn into_iter(self) -> Self::IntoIter {
         TreeIter::new(self)
@@ -58,7 +60,7 @@ impl IntoIterator for Node {
 }
 
 impl Node {
-    fn from_point(target: Vec<f64>, depth: usize) -> Node {
+    fn from_point(target: NDPoint, depth: usize) -> Node {
         Node {
             point: target,
             left: None,
@@ -66,7 +68,7 @@ impl Node {
             depth: depth,
         }
     }
-    fn contains_helper(&self, target: &Vec<f64>) -> bool {
+    fn contains_helper(&self, target: &NDPoint) -> bool {
         let axis = self.depth % self.point.len();
         match &self.point[axis].partial_cmp(&target[axis]) {
             Some(cmp::Ordering::Less) => self
@@ -91,7 +93,7 @@ impl Node {
         }
     }
 
-    fn add_helper(&mut self, target: Vec<f64>) {
+    fn add_helper(&mut self, target: NDPoint) {
         let axis = self.depth % self.point.len();
         if self.point[axis].ge(&target[axis]) {
             match &mut self.left {
@@ -107,7 +109,7 @@ impl Node {
     }
 }
 impl KDTree {
-    pub fn new(points: &mut Vec<Vec<f64>>) -> KDTree {
+    pub fn new(points: &mut Vec<NDPoint>) -> KDTree {
         if points.len() == 0 {
             return KDTree {
                 root: None,
@@ -121,7 +123,7 @@ impl KDTree {
         }
     }
 
-    fn _new_helper(points: &mut Vec<Vec<f64>>, depth: usize) -> Node {
+    fn _new_helper(points: &mut Vec<NDPoint>, depth: usize) -> Node {
         // Currently this function assumes that each point in points has the same number fo
         // elements.
         if points.len() == 0 {
@@ -158,20 +160,20 @@ impl KDTree {
             depth: depth,
         }
     }
-    pub fn iter(self) -> impl Iterator<Item = Vec<f64>> {
+    pub fn iter(self) -> impl Iterator<Item = NDPoint> {
         match self.root {
             Some(_root) => TreeIter::new(_root),
             None => TreeIter { stack: vec![] },
         }
     }
 
-    pub fn contains(&self, target: &Vec<f64>) -> bool {
+    pub fn contains(&self, target: &NDPoint) -> bool {
         match &self.root {
             Some(r) => r.contains_helper(target),
             None => false,
         }
     }
-    pub fn add(&mut self, target: Vec<f64>) {
+    pub fn add(&mut self, target: NDPoint) {
         self.size += 1;
         match &mut self.root {
             Some(node) => node.add_helper(target),
@@ -182,7 +184,7 @@ impl KDTree {
     }
 }
 impl IntoIterator for KDTree {
-    type Item = Vec<f64>;
+    type Item = NDPoint;
     type IntoIter = TreeIter;
     fn into_iter(self) -> Self::IntoIter {
         if let Some(node) = self.root {
