@@ -1,7 +1,14 @@
 #![allow(dead_code)]
+use ordered_float::NotNan;
 use std::cmp;
+use std::collections::binary_heap::BinaryHeap;
+#[derive(PartialOrd, Ord, Debug, Eq, Clone, PartialEq)]
+struct CandidatePointAndDistance {
+    distance_from_target: NotNan<f64>,
+    point: NDPoint,
+}
 
-type NDPoint = Vec<f64>;
+type NDPoint = Vec<NotNan<f64>>;
 #[derive(Default, Debug, Clone)]
 pub struct Node {
     //T needs to be an iterable. Each element of T needs to impl PartialOrd and I need to be able
@@ -10,7 +17,19 @@ pub struct Node {
     pub point: NDPoint,
     pub left: Option<Box<Node>>,
     pub right: Option<Box<Node>>,
+    // This may come back to haunt me. It adds state to the node that might be better in a
+    // function.
     pub depth: usize,
+}
+
+pub fn distance_sq(p1: &NDPoint, p2: &NDPoint) -> f64 {
+    // This should be handled at compile time for the point type
+    assert_eq!(p1.len(), p2.len());
+
+    p1.iter()
+        .zip(p2.iter())
+        .map(|(&a, &b)| (a - b).powi(2))
+        .fold(0.0, |a, b| a + b)
 }
 
 pub struct KDTree {
@@ -91,6 +110,49 @@ impl Node {
                         .map_or(false, |x| x.contains_helper(target))
             }
         }
+    }
+
+    fn query_helper<'a>(
+        &self,
+        target: &NDPoint,
+        nneighbors: usize,
+        mut candidates: &'a mut BinaryHeap<CandidatePointAndDistance>,
+    ) -> &'a mut BinaryHeap<CandidatePointAndDistance> {
+        let distance_to_target: NotNan<f64> = NotNan::new(distance_sq(&target, &self.point))
+            .expect("Float overflow. Idk what to do about this yet");
+        if candidates.len() < nneighbors {
+            // This will probably be an Arc?
+            //
+            candidates.push(CandidatePointAndDistance {
+                point: self.point.clone(),
+                distance_from_target: distance_to_target,
+            });
+        }
+        let axis = self.depth % target.len();
+        // THis can eb written more compactly, but I want clarity right now
+        let branch_to_check = match target[axis].partial_cmp(&self.point[axis]) {
+            Some(cmp::Ordering::Less) => 0,
+            _ => 1,
+        };
+        let branches = [&self.left, &self.right];
+        if let Some(node) = branches[branch_to_check] {
+            candidates = node.query_helper(&target, nneighbors, candidates);
+        }
+
+        // Do  the cheap check first. Does the tree have another branch?
+        if let Some(node) = branches[(1 + branch_to_check) % 2] {
+            // kdtree invariant.
+            let check_other_branch = (self.point[axis] - target[axis]).abs()
+                < candidates
+                    .peek()
+                    .map(|opt| opt.distance_from_target.clone().into_inner())
+                    .unwrap_or(-1.0);
+            if check_other_branch {
+                candidates = node.query_helper(&target, nneighbors, candidates);
+            }
+        }
+
+        candidates
     }
 
     fn add_helper(&mut self, target: NDPoint) {
