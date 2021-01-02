@@ -8,7 +8,7 @@ struct CandidatePointAndDistance {
     point: NDPoint,
 }
 
-type NDPoint = Vec<NotNan<f64>>;
+pub type NDPoint = Vec<NotNan<f64>>;
 #[derive(Default, Debug, Clone)]
 pub struct Node {
     //T needs to be an iterable. Each element of T needs to impl PartialOrd and I need to be able
@@ -235,6 +235,16 @@ impl KDTree {
             None => false,
         }
     }
+    pub fn query(&self, target: &NDPoint, nneighbors: usize) -> Vec<NDPoint> {
+        match &self.root {
+            Some(r) => {
+                let mut result = BinaryHeap::new();
+                r.query_helper(target, nneighbors, &mut result);
+                result.iter().map(|x| x.point.clone()).collect()
+            }
+            None => Vec::new(),
+        }
+    }
     pub fn add(&mut self, target: NDPoint) {
         self.size += 1;
         match &mut self.root {
@@ -260,7 +270,14 @@ mod tests {
     use super::*;
     #[test]
     fn test_kdtree_contains() {
-        let points = vec![vec![1., 2., 3.], vec![2., 3., 4.], vec![3., 4., 5.]];
+        let points = vec![vec![1., 2., 3.], vec![2., 3., 4.], vec![3., 4., 5.]]
+            .into_iter()
+            .map(|x| {
+                x.into_iter()
+                    .map(|f| NotNan::new(f).unwrap())
+                    .collect::<NDPoint>()
+            })
+            .collect::<Vec<NDPoint>>();
         let kdtree = KDTree::new(&mut points.clone());
         assert_eq!(kdtree.size, 3);
         for point in &points {
